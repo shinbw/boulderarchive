@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>My Drive on GitHub</title>
+  <style>
+    :root { --bg:#0b0c0f; --fg:#e7e7ea; --muted:#a0a4af; --card:#14161b; --accent:#7dd3fc; --border:#232530; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg, #0b0c0fd9, #0b0c0f00);backdrop-filter: blur(6px)}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    .bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .brand{font-weight:700;letter-spacing:.2px}
+    .config{margin-left:auto;display:flex;gap:8px;align-items:center}
+    input[type=text]{background:var(--card);border:1px solid var(--border);color:var(--fg);padding:8px 10px;border-radius:10px;outline:none;min-width:220px}
+    .crumbs{display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:var(--muted);margin-top:10px}
+    .crumbs a{color:var(--fg);text-decoration:none;background:var(--card);border:1px solid var(--border);padding:4px 8px;border-radius:9px}
+    .crumbs .sep{opacity:.4}
+    .panel{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:8px;margin-top:12px}
+    table{width:100%;border-collapse:separate;border-spacing:0}
+    thead th{position:sticky;top:80px;background:var(--card);text-align:left;font-weight:600;padding:12px;border-bottom:1px solid var(--border);}
+    tbody td{padding:10px;border-bottom:1px solid var(--border)}
+    tbody tr{transition:background .15s ease}
+    tbody tr:hover{background:#1b1e25}
+    .name{display:flex;align-items:center;gap:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .type{color:var(--muted)}
+    .size{color:var(--muted);font-variant-numeric:tabular-nums}
+    .empty{color:var(--muted);padding:22px;text-align:center}
+    .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);background:var(--card);padding:8px 10px;border-radius:10px;color:var(--fg);text-decoration:none}
+    .btn:focus,.btn:hover{outline:0;border-color:#2f3341}
+    .right{display:flex;gap:8px;justify-content:flex-end}
+    .badge{font-size:12px;color:#9fb6f0;border:1px solid #2a3550;background:#161c2c;padding:2px 6px;border-radius:8px}
+    .notice{color:var(--muted);font-size:13px;margin-top:6px}
+    .loading{padding:28px;text-align:center;color:var(--muted)}
+    .error{padding:18px;border:1px solid #5b2734;background:#2a0f15;color:#f7c7cf;border-radius:12px}
+    .hint{font-size:12px;color:var(--muted);}
+    /* modal */
+    .modal{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;padding:20px}
+    .modal.open{display:flex}
+    .modal > .box{background:var(--card);border:1px solid var(--border);border-radius:16px;width:min(100%,1000px);max-height:90vh;display:flex;flex-direction:column}
+    .modal header{position:sticky;top:0;background:var(--card);padding:12px 14px;border-bottom:1px solid var(--border)}
+    .modal .body{padding:12px;overflow:auto}
+    pre{background:#0e1116;border:1px solid var(--border);padding:12px;border-radius:12px;overflow:auto}
+    img,iframe{max-width:100%;border-radius:10px;border:1px solid var(--border)}
+    .icon{width:18px;height:18px;display:inline-block}
+    .click{cursor:pointer}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div class="bar">
+        <div class="brand">📁 My Drive on GitHub</div>
+        <div class="config">
+          <input id="search" type="text" placeholder="이 폴더에서 찾기... (이름 필터)" />
+          <a id="rawBtn" class="btn" href="#" target="_blank" title="현재 폴더를 GitHub에서 열기">GitHub에서 열기</a>
+        </div>
+      </div>
+      <nav class="crumbs" id="breadcrumbs"></nav>
+    </div>
+  </header>
+  <main class="wrap">
+    <div class="panel">
+      <div class="right" style="padding:6px 8px 0 8px">
+        <span class="badge">Public repo·읽기 전용</span>
+        <button class="btn" id="upBtn" title="상위 폴더">⬆️ 상위</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:50%"><button class="btn" id="sortName">이름 ▲</button></th>
+            <th style="width:15%"><button class="btn" id="sortType">유형</button></th>
+            <th style="width:15%"><button class="btn" id="sortSize">크기</button></th>
+            <th style="width:20%">작업</th>
+          </tr>
+        </thead>
+        <tbody id="list"><tr><td colspan="4" class="loading">불러오는 중...</td></tr></tbody>
+      </table>
+      <div class="notice">🔎 이미지/텍스트/PDF는 미리보기 가능. 그 외 파일은 <b>다운로드</b> 버튼을 이용하세요.</div>
+    </div>
+    <div class="hint">설정: 아래 CONFIG를 본인 저장소로 바꾸세요. 개인(Private) 저장소는 프런트엔드만으로는 지원되지 않습니다.</div>
+  </main>
+
+  <!-- Preview modal -->
+  <div class="modal" id="previewModal" role="dialog" aria-modal="true">
+    <div class="box">
+      <header class="bar" style="gap:8px">
+        <div id="pvTitle" style="flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+        <a id="pvDownload" class="btn" target="_blank">다운로드</a>
+        <button class="btn" id="pvClose">닫기</button>
+      </header>
+      <div class="body" id="pvBody"></div>
+    </div>
+  </div>
+
+  <script>
+  // ======= CONFIG =======
+  const CONFIG = {
+    owner: 'YOUR_GITHUB_ID',  // ← 본인 GitHub 사용자명
+    repo: 'YOUR_REPO_NAME',   // ← 파일·폴더가 들어있는 공개 저장소 이름
+    branch: 'main'            // ← 기본 브랜치 (ex. main/master)
+    // 참고: Private repo는 프런트엔드에서 토큰을 쓰면 유출 위험. Cloudflare Workers/Netlify Functions 같은 서버리스 프록시가 필요합니다.
+  };
+  // =======================
+
+  const state = { path: '', items: [], sort: { key:'name', asc:true } };
+
+  const $ = (sel, el=document) => el.querySelector(sel);
+  const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+
+  const listEl = $('#list');
+  const crumbsEl = $('#breadcrumbs');
+  const searchEl = $('#search');
+  const rawBtn = $('#rawBtn');
+
+  function apiUrl(path) {
+    const clean = path.replace(/^\/+|\/+$/g,'');
+    return `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${clean}?ref=${CONFIG.branch}`;
+  }
+  function ghTreeUrl(path) {
+    const clean = path.replace(/^\/+|\/+$/g,'');
+    const p = clean? `/tree/${CONFIG.branch}/${clean}` : '';
+    return `https://github.com/${CONFIG.owner}/${CONFIG.repo}${p}`;
+  }
+  function rawUrl(download_url) {
+    // download_url는 이미 raw.githubusercontent.com 링크이므로 그대로 사용
+    return download_url;
+  }
+
+  async function load(path=''){
+    state.path = path.replace(/^\/+|\/+$/g,'');
+    listEl.innerHTML = `<tr><td colspan="4" class="loading">불러오는 중...</td></tr>`;
+    rawBtn.href = ghTreeUrl(state.path);
+
+    try {
+      const res = await fetch(apiUrl(state.path), { headers: { 'Accept': 'application/vnd.github+json' }});
+      if(!res.ok) throw new Error(`GitHub API 오류: ${res.status}`);
+      const data = await res.json();
+      state.items = Array.isArray(data) ? data : [];
+      render();
+      renderCrumbs();
+      // URL 해시 동기화
+      const hash = '#' + encodeURIComponent(state.path);
+      if(location.hash !== hash) history.replaceState({}, '', hash);
+    } catch(err){
+      listEl.innerHTML = `<tr><td colspan="4"><div class="error">목록을 불러오지 못했습니다. ${err.message}</div></td></tr>`;
+    }
+  }
+
+  function renderCrumbs(){
+    const parts = state.path ? state.path.split('/') : [];
+    crumbsEl.innerHTML = '';
+    const root = document.createElement('a');
+    root.textContent = `${CONFIG.owner}/${CONFIG.repo}`;
+    root.href = '#';
+    root.onclick = (e)=>{e.preventDefault(); load('')};
+    crumbsEl.appendChild(root);
+    let cur='';
+    parts.forEach((seg,i)=>{
+      const sep = document.createElement('span'); sep.className='sep'; sep.textContent='›'; crumbsEl.appendChild(sep);
+      cur += (cur?'/':'') + seg;
+      const a = document.createElement('a'); a.textContent = seg; a.href = '#'; a.onclick=(e)=>{e.preventDefault(); load(cur)};
+      crumbsEl.appendChild(a);
+    });
+  }
+
+  function sortItems(items){
+    const {key,asc} = state.sort;
+    const dir = asc? 1 : -1;
+    const isDirFirst = (a,b)=> (a.type===b.type)?0 : (a.type==='dir'?-1:1);
+    const byName = (a,b)=> a.name.localeCompare(b.name);
+    const byType = (a,b)=> a.type.localeCompare(b.type) || byName(a,b);
+    const bySize = (a,b)=> (a.size||0)-(b.size||0) || byName(a,b);
+    const cmp = key==='type'? byType : key==='size'? bySize : byName;
+    return items.slice().sort((a,b)=> isDirFirst(a,b) || dir*cmp(a,b));
+  }
+
+  function formatSize(bytes){
+    if(bytes==null) return '-';
+    const units=['B','KB','MB','GB'];
+    let n=bytes, i=0; while(n>=1024 && i<units.length-1){ n/=1024; i++; }
+    return (i? n.toFixed(1):n) + ' ' + units[i];
+  }
+
+  function iconOf(item){
+    const ext = (item.name.split('.').pop()||'').toLowerCase();
+    const isImg = ['png','jpg','jpeg','gif','webp','bmp','svg','avif'].includes(ext);
+    const isPdf = ext==='pdf';
+    if(item.type==='dir') return '📂';
+    if(isImg) return '🖼️';
+    if(isPdf) return '📄';
+    return '📘';
+  }
+
+  function rowHtml(item){
+    const name = item.name;
+    const type = item.type==='dir'? '폴더' : '파일';
+    const size = item.type==='dir'? '-' : formatSize(item.size);
+    const openBtn = item.type==='dir'
+      ? `<button class="btn" data-open="${encodeURIComponent(item.path)}">열기</button>`
+      : `<a class="btn" href="${rawUrl(item.download_url)}" target="_blank">다운로드</a>
+         <button class="btn" data-preview='${encodeURIComponent(JSON.stringify({name:item.name,url:item.download_url}))}'>미리보기</button>`;
+    return `<tr>
+      <td class="name click" data-open="${encodeURIComponent(item.path)}">${iconOf(item)} ${name}</td>
+      <td class="type">${type}</td>
+      <td class="size">${size}</td>
+      <td class="right">${openBtn}</td>
+    </tr>`;
+  }
+
+  function render(){
+    const q = searchEl.value.trim().toLowerCase();
+    const items = sortItems(state.items).filter(it => it.name.toLowerCase().includes(q));
+    if(!items.length){ listEl.innerHTML = `<tr><td colspan="4" class="empty">비어 있거나 검색 결과가 없습니다.</td></tr>`; return }
+    listEl.innerHTML = items.map(rowHtml).join('');
+  }
+
+  // Delegated events
+  document.addEventListener('click', async (e)=>{
+    const open = e.target.closest('[data-open]');
+    if(open){
+      const path = decodeURIComponent(open.getAttribute('data-open'));
+      const isDir = state.items.find(x=>x.path===path)?.type==='dir';
+      if(isDir){ load(path); }
+      return;
+    }
+    const pv = e.target.closest('[data-preview]');
+    if(pv){
+      const data = JSON.parse(decodeURIComponent(pv.getAttribute('data-preview')));
+      openPreview(data.name, data.url);
+    }
+  });
+
+  // Sorting
+  $('#sortName').onclick = ()=>{ toggleSort('name') };
+  $('#sortType').onclick = ()=>{ toggleSort('type') };
+  $('#sortSize').onclick = ()=>{ toggleSort('size') };
+  function toggleSort(key){
+    state.sort.asc = state.sort.key===key ? !state.sort.asc : true;
+    state.sort.key = key;
+    // 버튼 라벨 업데이트
+    $('#sortName').textContent = '이름' + (state.sort.key==='name' ? (state.sort.asc?' ▲':' ▼') : '');
+    $('#sortType').textContent = '유형' + (state.sort.key==='type' ? (state.sort.asc?' ▲':' ▼') : '');
+    $('#sortSize').textContent = '크기' + (state.sort.key==='size' ? (state.sort.asc?' ▲':' ▼') : '');
+    render();
+  }
+
+  // Search
+  searchEl.addEventListener('input', ()=> render());
+
+  // Up button
+  $('#upBtn').onclick = ()=>{
+    if(!state.path) return;
+    const up = state.path.split('/').slice(0,-1).join('/');
+    load(up);
+  };
+
+  // Hash navigation (allow bookmarking paths)
+  window.addEventListener('hashchange', ()=>{
+    const next = decodeURIComponent(location.hash.replace(/^#/,''));
+    if(next !== state.path){ load(next); }
+  });
+
+  // Preview modal
+  const modal = $('#previewModal');
+  const pvTitle = $('#pvTitle');
+  const pvBody = $('#pvBody');
+  const pvDownload = $('#pvDownload');
+  $('#pvClose').onclick = ()=> modal.classList.remove('open');
+  modal.addEventListener('click', (e)=>{ if(e.target===modal) modal.classList.remove('open'); });
+
+  async function openPreview(name, url){
+    pvTitle.textContent = name;
+    pvBody.innerHTML = '<div class="loading">미리보기 불러오는 중...</div>';
+    pvDownload.href = url;
+    modal.classList.add('open');
+    const ext = (name.split('.').pop()||'').toLowerCase();
+    const isImg = ['png','jpg','jpeg','gif','webp','bmp','svg','avif'].includes(ext);
+    const isPdf = ext==='pdf';
+    const isText = ['txt','md','csv','json','js','ts','py','html','css','yml','yaml','xml'].includes(ext);
+
+    try{
+      if(isImg){
+        pvBody.innerHTML = `<img src="${url}" alt="${name}" />`;
+      } else if(isPdf){
+        pvBody.innerHTML = `<iframe src="${url}" style="width:100%;height:68vh"></iframe>`;
+      } else if(isText){
+        const res = await fetch(url);
+        const text = await res.text();
+        const clipped = text.length>200000 ? text.slice(0,200000) + "\n\n... (미리보기는 200KB까지만 표시)" : text;
+        pvBody.innerHTML = `<pre><code></code></pre>`;
+        pvBody.querySelector('code').textContent = clipped;
+      } else {
+        pvBody.innerHTML = `<div class="empty">이 형식은 브라우저 미리보기를 지원하지 않습니다. 상단의 <b>다운로드</b>를 이용하세요.</div>`;
+      }
+    } catch(err){
+      pvBody.innerHTML = `<div class="error">미리보기에 실패했습니다. ${err.message}</div>`;
+    }
+  }
+
+  // Bootstrap
+  (function init(){
+    
+    const initPath = decodeURIComponent(location.hash.replace(/^#/,''));
+    load(initPath);
+  })();
+  </script>
+</body>
+</html>
