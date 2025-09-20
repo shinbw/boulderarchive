@@ -78,7 +78,7 @@
       </table>
       <div class="notice">🔎 이미지/텍스트/PDF는 미리보기 가능. 그 외 파일은 <b>다운로드</b> 버튼을 이용하세요.</div>
     </div>
-    <div class="hint">설정: 아래 CONFIG를 본인 저장소로 바꾸세요. 개인(Private) 저장소는 프런트엔드만으로는 지원되지 않습니다.</div>
+    <div class="hint">※ 현재 저장소: <b>shinwbw/boulderarchive</b></div>
   </main>
 
   <!-- Preview modal -->
@@ -94,14 +94,13 @@
   </div>
 
   <script>
-  // ======= CONFIG =======
+  // ======= CONFIG (CNAME/커스텀 도메인 미사용) =======
   const CONFIG = {
-    owner: 'YOUR_GITHUB_ID',  // ← 본인 GitHub 사용자명
-    repo: 'YOUR_REPO_NAME',   // ← 파일·폴더가 들어있는 공개 저장소 이름
-    branch: 'main'            // ← 기본 브랜치 (ex. main/master)
-    // 참고: Private repo는 프런트엔드에서 토큰을 쓰면 유출 위험. Cloudflare Workers/Netlify Functions 같은 서버리스 프록시가 필요합니다.
+    owner: 'shinwbw',
+    repo: 'boulderarchive',
+    branch: 'main'
   };
-  // =======================
+  // ===================================================
 
   const state = { path: '', items: [], sort: { key:'name', asc:true } };
 
@@ -123,8 +122,7 @@
     return `https://github.com/${CONFIG.owner}/${CONFIG.repo}${p}`;
   }
   function rawUrl(download_url) {
-    // download_url는 이미 raw.githubusercontent.com 링크이므로 그대로 사용
-    return download_url;
+    return download_url; // GitHub가 제공하는 raw 링크 그대로 사용
   }
 
   async function load(path=''){
@@ -156,7 +154,7 @@
     root.onclick = (e)=>{e.preventDefault(); load('')};
     crumbsEl.appendChild(root);
     let cur='';
-    parts.forEach((seg,i)=>{
+    parts.forEach((seg)=>{
       const sep = document.createElement('span'); sep.className='sep'; sep.textContent='›'; crumbsEl.appendChild(sep);
       cur += (cur?'/':'') + seg;
       const a = document.createElement('a'); a.textContent = seg; a.href = '#'; a.onclick=(e)=>{e.preventDefault(); load(cur)};
@@ -238,7 +236,6 @@
   function toggleSort(key){
     state.sort.asc = state.sort.key===key ? !state.sort.asc : true;
     state.sort.key = key;
-    // 버튼 라벨 업데이트
     $('#sortName').textContent = '이름' + (state.sort.key==='name' ? (state.sort.asc?' ▲':' ▼') : '');
     $('#sortType').textContent = '유형' + (state.sort.key==='type' ? (state.sort.asc?' ▲':' ▼') : '');
     $('#sortSize').textContent = '크기' + (state.sort.key==='size' ? (state.sort.asc?' ▲':' ▼') : '');
@@ -255,7 +252,7 @@
     load(up);
   };
 
-  // Hash navigation (allow bookmarking paths)
+  // Hash navigation
   window.addEventListener('hashchange', ()=>{
     const next = decodeURIComponent(location.hash.replace(/^#/,''));
     if(next !== state.path){ load(next); }
@@ -300,7 +297,6 @@
 
   // Bootstrap
   (function init(){
-    
     const initPath = decodeURIComponent(location.hash.replace(/^#/,''));
     load(initPath);
   })();
