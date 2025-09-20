@@ -1,14 +1,12 @@
 <script>
+document.addEventListener('DOMContentLoaded', () => {
 /* ===== 강제 설정(수정하지 마세요) ===== */
-const CONFIG = {
-  owner: 'shinwbw',
-  repo: 'boulderarchive',
-  branch: 'main' // 우선 main 시도, 실패 시 자동으로 기본 브랜치 감지
-};
+const CONFIG = { owner: 'shinwbw', repo: 'boulderarchive', branch: 'main' };
 /* =================================== */
 
 const state = { path: '', items: [], sort: { key:'name', asc:true }, branchTried:false };
 const $ = (sel, el=document) => el.querySelector(sel);
+
 const listEl = $('#list');
 const crumbsEl = $('#breadcrumbs');
 const searchEl = $('#search');
@@ -19,8 +17,7 @@ const diag = document.createElement('div');
 diag.className = 'hint';
 diag.style.marginTop = '8px';
 diag.innerHTML = '진단: 시작됨';
-document.querySelector('.wrap').appendChild(diag);
-
+(document.querySelector('.wrap') || document.body).appendChild(diag);
 function setDiag(msg){ diag.innerHTML = '진단: ' + msg; }
 
 function apiUrl(path, branch){
@@ -34,7 +31,6 @@ function ghTreeUrl(path, branch){
   const p = clean? `/tree/${branch}/${clean}` : '';
   return `https://github.com/${CONFIG.owner}/${CONFIG.repo}${p}`;
 }
-
 async function getDefaultBranch(){
   const u = `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}?nocache=${Date.now()}`;
   const r = await fetch(u, { headers: { 'Accept': 'application/vnd.github+json' }});
@@ -42,20 +38,16 @@ async function getDefaultBranch(){
   const j = await r.json();
   return j.default_branch || 'main';
 }
-
 async function load(path=''){
   state.path = (path||'').replace(/^\/+|\/+$/g,'');
   listEl.innerHTML = `<tr><td colspan="4" class="loading">불러오는 중...</td></tr>`;
   rawBtn.href = ghTreeUrl(state.path, CONFIG.branch);
   setDiag(`요청: ${apiUrl(state.path, CONFIG.branch)}`);
-
   try {
     const res = await fetch(apiUrl(state.path, CONFIG.branch), { headers: { 'Accept': 'application/vnd.github+json' }});
     if(!res.ok){
-      // 404/403 같은 경우 원인 메시지 노출
       const txt = await res.text().catch(()=> '');
       if(res.status === 404 && !state.branchTried){
-        // main이 아닐 수 있음 → 기본 브랜치 자동 감지 후 재시도
         setDiag(`main에서 404 → 기본 브랜치 감지 중...`);
         const def = await getDefaultBranch();
         CONFIG.branch = def;
@@ -64,11 +56,9 @@ async function load(path=''){
         setDiag(`기본 브랜치=${def} 로 재시도`);
         return load(state.path);
       }
-      // 레이트리밋 안내
       if(res.status === 403 && txt.includes('rate limit')){
-        throw new Error('GitHub API 레이트리밋(403). 잠시 뒤 새로고침 하세요. (많이 눌렀을 때 발생)');
+        throw new Error('GitHub API 레이트리밋(403). 잠시 뒤 새로고침 하세요.');
       }
-      // 프라이빗/없는 경로/브랜치 불일치
       if(res.status === 404){
         throw new Error('404: 경로가 없거나 레포/브랜치가 맞지 않습니다. (레포 Public인지, 브랜치명 확인)');
       }
@@ -86,7 +76,6 @@ async function load(path=''){
     setDiag(`실패: ${err.message}`);
   }
 }
-
 function renderCrumbs(){
   const parts = state.path ? state.path.split('/') : [];
   crumbsEl.innerHTML = '';
@@ -103,7 +92,6 @@ function renderCrumbs(){
     crumbsEl.appendChild(a);
   });
 }
-
 function sortItems(items){
   const {key,asc} = state.sort;
   const dir = asc? 1 : -1;
@@ -144,13 +132,11 @@ function rowHtml(item){
   </tr>`;
 }
 function render(){
-  const q = searchEl.value.trim().toLowerCase();
+  const q = (searchEl.value||'').trim().toLowerCase();
   const items = sortItems(state.items).filter(it => it.name.toLowerCase().includes(q));
   if(!items.length){ listEl.innerHTML = `<tr><td colspan="4" class="empty">비어 있거나 검색 결과가 없습니다.</td></tr>`; return }
   listEl.innerHTML = items.map(rowHtml).join('');
 }
-
-/* 이벤트 */
 document.addEventListener('click', (e)=>{
   const open = e.target.closest('[data-open]');
   if(open){
@@ -187,7 +173,6 @@ const pvBody = $('#pvBody');
 const pvDownload = $('#pvDownload');
 $('#pvClose').onclick = ()=> modal.classList.remove('open');
 modal.addEventListener('click', (e)=>{ if(e.target===modal) modal.classList.remove('open'); });
-
 async function openPreview(name, url){
   pvTitle.textContent = name;
   pvBody.innerHTML = '<div class="loading">미리보기 불러오는 중...</div>';
@@ -217,8 +202,7 @@ async function openPreview(name, url){
 }
 
 /* 부트스트랩 */
-(function init(){
-  const initPath = decodeURIComponent(location.hash.replace(/^#/,''));
-  load(initPath);
-})();
+const initPath = decodeURIComponent(location.hash.replace(/^#/,'')); 
+load(initPath);
+}); // DOMContentLoaded
 </script>
