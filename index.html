@@ -1,30 +1,80 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-/* ===== 강제 설정(수정하지 마세요) ===== */
+/* ===== 고정 설정 (수정 X) ===== */
 const CONFIG = { owner: 'shinwbw', repo: 'boulderarchive', branch: 'main' };
-/* =================================== */
+/* ================================= */
 
 const state = { path: '', items: [], sort: { key:'name', asc:true }, branchTried:false };
 const $ = (sel, el=document) => el.querySelector(sel);
 
+/* 필요한 요소가 없으면 자동으로 만들어주는 안전판 */
+function buildScaffoldIfMissing(){
+  const need = {
+    wrap: document.querySelector('.wrap'),
+    search: document.getElementById('search'),
+    rawBtn: document.getElementById('rawBtn'),
+    crumbs: document.getElementById('breadcrumbs'),
+    list: document.getElementById('list')
+  };
+  if (need.wrap && need.search && need.rawBtn && need.crumbs && need.list) return;
+
+  // 최소 UI 생성
+  const wrap = need.wrap || document.createElement('div');
+  wrap.className = 'wrap';
+  wrap.style.maxWidth = '1100px';
+  wrap.style.margin = '0 auto';
+  wrap.style.padding = '16px';
+
+  // 상단 바
+  const top = document.createElement('div');
+  top.style.display = 'flex';
+  top.style.gap = '8px';
+  top.style.alignItems = 'center';
+  top.style.marginBottom = '8px';
+  top.innerHTML = `
+    <input id="search" type="text" placeholder="이 폴더에서 찾기..." style="flex:1;min-width:220px;padding:8px 10px">
+    <a id="rawBtn" class="btn" href="#" target="_blank" style="padding:8px 10px;border:1px solid #ccc;border-radius:8px;text-decoration:none">GitHub에서 열기</a>
+  `;
+
+  const crumbs = document.createElement('nav');
+  crumbs.id = 'breadcrumbs';
+  crumbs.style.margin = '6px 0 12px 0';
+
+  const table = document.createElement('table');
+  table.style.width = '100%';
+  const tbody = document.createElement('tbody');
+  tbody.id = 'list';
+  tbody.innerHTML = `<tr><td style="padding:12px;color:#888">UI 스캐폴드 자동 생성됨…</td></tr>`;
+  table.appendChild(tbody);
+
+  // 조립
+  if (!need.wrap) document.body.appendChild(wrap);
+  wrap.appendChild(top);
+  wrap.appendChild(crumbs);
+  wrap.appendChild(table);
+}
+buildScaffoldIfMissing();
+
+/* 요소 참조 (스캐폴드 생성 후 다시 잡기) */
 const listEl = $('#list');
 const crumbsEl = $('#breadcrumbs');
 const searchEl = $('#search');
 const rawBtn = $('#rawBtn');
 
-/* == 진단 박스 추가 == */
+/* 진단 박스 */
 const diag = document.createElement('div');
 diag.className = 'hint';
 diag.style.marginTop = '8px';
-diag.innerHTML = '진단: 시작됨';
+diag.style.color = '#888';
+diag.textContent = '진단: 시작됨';
 (document.querySelector('.wrap') || document.body).appendChild(diag);
-function setDiag(msg){ diag.innerHTML = '진단: ' + msg; }
+function setDiag(msg){ diag.textContent = '진단: ' + msg; }
 
+/* API 유틸 */
 function apiUrl(path, branch){
   const clean = (path||'').replace(/^\/+|\/+$/g,'');
   const b = encodeURIComponent(branch||CONFIG.branch);
-  const n = Date.now();
-  return `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${clean}?ref=${b}&nocache=${n}`;
+  return `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${clean}?ref=${b}&nocache=${Date.now()}`;
 }
 function ghTreeUrl(path, branch){
   const clean = (path||'').replace(/^\/+|\/+$/g,'');
@@ -38,60 +88,8 @@ async function getDefaultBranch(){
   const j = await r.json();
   return j.default_branch || 'main';
 }
-async function load(path=''){
-  state.path = (path||'').replace(/^\/+|\/+$/g,'');
-  listEl.innerHTML = `<tr><td colspan="4" class="loading">불러오는 중...</td></tr>`;
-  rawBtn.href = ghTreeUrl(state.path, CONFIG.branch);
-  setDiag(`요청: ${apiUrl(state.path, CONFIG.branch)}`);
-  try {
-    const res = await fetch(apiUrl(state.path, CONFIG.branch), { headers: { 'Accept': 'application/vnd.github+json' }});
-    if(!res.ok){
-      const txt = await res.text().catch(()=> '');
-      if(res.status === 404 && !state.branchTried){
-        setDiag(`main에서 404 → 기본 브랜치 감지 중...`);
-        const def = await getDefaultBranch();
-        CONFIG.branch = def;
-        state.branchTried = true;
-        rawBtn.href = ghTreeUrl(state.path, CONFIG.branch);
-        setDiag(`기본 브랜치=${def} 로 재시도`);
-        return load(state.path);
-      }
-      if(res.status === 403 && txt.includes('rate limit')){
-        throw new Error('GitHub API 레이트리밋(403). 잠시 뒤 새로고침 하세요.');
-      }
-      if(res.status === 404){
-        throw new Error('404: 경로가 없거나 레포/브랜치가 맞지 않습니다. (레포 Public인지, 브랜치명 확인)');
-      }
-      throw new Error(`${res.status} 응답: ${txt.slice(0,200)}`);
-    }
-    const data = await res.json();
-    state.items = Array.isArray(data) ? data : [];
-    render();
-    renderCrumbs();
-    const hash = '#' + encodeURIComponent(state.path);
-    if(location.hash !== hash) history.replaceState({}, '', hash);
-    setDiag(`성공: ${CONFIG.owner}/${CONFIG.repo}@${CONFIG.branch} /${state.path||''}`);
-  } catch(err){
-    listEl.innerHTML = `<tr><td colspan="4"><div class="error">목록 실패: ${err.message}</div></td></tr>`;
-    setDiag(`실패: ${err.message}`);
-  }
-}
-function renderCrumbs(){
-  const parts = state.path ? state.path.split('/') : [];
-  crumbsEl.innerHTML = '';
-  const root = document.createElement('a');
-  root.textContent = `${CONFIG.owner}/${CONFIG.repo}@${CONFIG.branch}`;
-  root.href = '#';
-  root.onclick = (e)=>{e.preventDefault(); load('')};
-  crumbsEl.appendChild(root);
-  let cur='';
-  parts.forEach((seg)=>{
-    const sep = document.createElement('span'); sep.className='sep'; sep.textContent='›'; crumbsEl.appendChild(sep);
-    cur += (cur?'/':'') + seg;
-    const a = document.createElement('a'); a.textContent = seg; a.href = '#'; a.onclick=(e)=>{e.preventDefault(); load(cur)};
-    crumbsEl.appendChild(a);
-  });
-}
+
+/* 렌더링 */
 function sortItems(items){
   const {key,asc} = state.sort;
   const dir = asc? 1 : -1;
@@ -134,9 +132,27 @@ function rowHtml(item){
 function render(){
   const q = (searchEl.value||'').trim().toLowerCase();
   const items = sortItems(state.items).filter(it => it.name.toLowerCase().includes(q));
-  if(!items.length){ listEl.innerHTML = `<tr><td colspan="4" class="empty">비어 있거나 검색 결과가 없습니다.</td></tr>`; return }
+  if(!items.length){ listEl.innerHTML = `<tr><td colspan="4" style="padding:12px;color:#888">비어 있거나 검색 결과가 없습니다.</td></tr>`; return }
   listEl.innerHTML = items.map(rowHtml).join('');
 }
+function renderCrumbs(){
+  const parts = state.path ? state.path.split('/') : [];
+  crumbsEl.innerHTML = '';
+  const root = document.createElement('a');
+  root.textContent = `${CONFIG.owner}/${CONFIG.repo}@${CONFIG.branch}`;
+  root.href = '#';
+  root.onclick = (e)=>{e.preventDefault(); load('')};
+  crumbsEl.appendChild(root);
+  let cur='';
+  parts.forEach((seg)=>{
+    const sep = document.createElement('span'); sep.textContent=' › '; crumbsEl.appendChild(sep);
+    cur += (cur?'/':'') + seg;
+    const a = document.createElement('a'); a.textContent = seg; a.href = '#'; a.onclick=(e)=>{e.preventDefault(); load(cur)};
+    crumbsEl.appendChild(a);
+  });
+}
+
+/* 이벤트 */
 document.addEventListener('click', (e)=>{
   const open = e.target.closest('[data-open]');
   if(open){
@@ -151,29 +167,33 @@ document.addEventListener('click', (e)=>{
     openPreview(data.name, data.url);
   }
 });
-$('#sortName').onclick = ()=> toggleSort('name');
-$('#sortType').onclick = ()=> toggleSort('type');
-$('#sortSize').onclick = ()=> toggleSort('size');
 function toggleSort(key){
   state.sort.asc = state.sort.key===key ? !state.sort.asc : true;
-  state.sort.key = key;
-  $('#sortName').textContent = '이름' + (state.sort.key==='name' ? (state.sort.asc?' ▲':' ▼') : '');
-  $('#sortType').textContent = '유형' + (state.sort.key==='type' ? (state.sort.asc?' ▲':' ▼') : '');
-  $('#sortSize').textContent = '크기' + (state.sort.key==='size' ? (state.sort.asc?' ▲':' ▼') : '');
-  render();
+  state.sort.key = key; render();
 }
-searchEl.addEventListener('input', ()=> render());
-$('#upBtn').onclick = ()=>{ if(!state.path) return; const up = state.path.split('/').slice(0,-1).join('/'); load(up); };
+const sortNameBtn = document.getElementById('sortName');
+const sortTypeBtn = document.getElementById('sortType');
+const sortSizeBtn = document.getElementById('sortSize');
+if (sortNameBtn) sortNameBtn.onclick = ()=> toggleSort('name');
+if (sortTypeBtn) sortTypeBtn.onclick = ()=> toggleSort('type');
+if (sortSizeBtn) sortSizeBtn.onclick = ()=> toggleSort('size');
+if (searchEl) searchEl.addEventListener('input', ()=> render());
+const upBtn = document.getElementById('upBtn');
+if (upBtn) upBtn.onclick = ()=>{ if(!state.path) return; const up = state.path.split('/').slice(0,-1).join('/'); load(up); };
 window.addEventListener('hashchange', ()=>{ const next = decodeURIComponent(location.hash.replace(/^#/,'')); if(next !== state.path){ load(next); } });
 
 /* 미리보기 */
-const modal = $('#previewModal');
-const pvTitle = $('#pvTitle');
-const pvBody = $('#pvBody');
-const pvDownload = $('#pvDownload');
-$('#pvClose').onclick = ()=> modal.classList.remove('open');
-modal.addEventListener('click', (e)=>{ if(e.target===modal) modal.classList.remove('open'); });
+const modal = document.getElementById('previewModal');
+const pvTitle = document.getElementById('pvTitle');
+const pvBody = document.getElementById('pvBody');
+const pvDownload = document.getElementById('pvDownload');
+if (modal){
+  const pvClose = document.getElementById('pvClose');
+  if (pvClose) pvClose.onclick = ()=> modal.classList.remove('open');
+  modal.addEventListener('click', (e)=>{ if(e.target===modal) modal.classList.remove('open'); });
+}
 async function openPreview(name, url){
+  if (!modal || !pvTitle || !pvBody || !pvDownload) return window.open(url, '_blank');
   pvTitle.textContent = name;
   pvBody.innerHTML = '<div class="loading">미리보기 불러오는 중...</div>';
   pvDownload.href = url;
@@ -201,7 +221,48 @@ async function openPreview(name, url){
   }
 }
 
-/* 부트스트랩 */
+/* 로드 */
+async function load(path=''){
+  state.path = (path||'').replace(/^\/+|\/+$/g,'');
+  if (!listEl) { setDiag('오류: #list 요소가 없음 — 자동 UI 생성 실패'); return; }
+  listEl.innerHTML = `<tr><td colspan="4" class="loading">불러오는 중...</td></tr>`;
+  if (rawBtn) rawBtn.href = ghTreeUrl(state.path, CONFIG.branch);
+  setDiag(`요청: ${apiUrl(state.path, CONFIG.branch)}`);
+
+  try {
+    const res = await fetch(apiUrl(state.path, CONFIG.branch), { headers: { 'Accept': 'application/vnd.github+json' }});
+    if(!res.ok){
+      const txt = await res.text().catch(()=> '');
+      if(res.status === 404 && !state.branchTried){
+        setDiag(`main에서 404 → 기본 브랜치 감지 중...`);
+        const def = await getDefaultBranch();
+        CONFIG.branch = def; state.branchTried = true;
+        if (rawBtn) rawBtn.href = ghTreeUrl(state.path, CONFIG.branch);
+        setDiag(`기본 브랜치=${def} 로 재시도`);
+        return load(state.path);
+      }
+      if(res.status === 403 && txt.includes('rate limit')){
+        throw new Error('GitHub API 레이트리밋(403). 잠시 뒤 새로고침 하세요.');
+      }
+      if(res.status === 404){
+        throw new Error('404: 경로가 없거나 레포/브랜치가 맞지 않습니다. (Public/브랜치 확인)');
+      }
+      throw new Error(`${res.status} 응답: ${txt.slice(0,200)}`);
+    }
+    const data = await res.json();
+    state.items = Array.isArray(data) ? data : [];
+    render();
+    renderCrumbs();
+    const hash = '#' + encodeURIComponent(state.path);
+    if(location.hash !== hash) history.replaceState({}, '', hash);
+    setDiag(`성공: ${CONFIG.owner}/${CONFIG.repo}@${CONFIG.branch} /${state.path||''}`);
+  } catch(err){
+    listEl.innerHTML = `<tr><td colspan="4"><div class="error">목록 실패: ${err.message}</div></td></tr>`;
+    setDiag(`실패: ${err.message}`);
+  }
+}
+
+/* 시작! */
 const initPath = decodeURIComponent(location.hash.replace(/^#/,'')); 
 load(initPath);
 }); // DOMContentLoaded
